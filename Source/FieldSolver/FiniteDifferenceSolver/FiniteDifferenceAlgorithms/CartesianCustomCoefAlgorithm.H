@@ -33,8 +33,6 @@ struct CartesianCustomCoefAlgorithm {
 
         using namespace amrex;
 
-        // Compute Cole-Karkkainen-Cowan coefficients according
-        // to Cowan - PRST-AB 16, 041303 (2013)
         Real const inv_dx = 1._rt/cell_size[0];
         Real const inv_dy = 1._rt/cell_size[1];
         Real const inv_dz = 1._rt/cell_size[2];
