@@ -1,0 +1,5 @@
+# base input parameters
+FILE = inputs_base_3d
+
+algo.maxwell_solver = customcoef
+warpx.cfl = 0.5
