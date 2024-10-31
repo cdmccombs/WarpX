@@ -46,7 +46,6 @@ struct CartesianCustomCoefAlgorithm {
         stencil_coefs_z.resize(2);
         stencil_coefs_z[0] = 1._rt*inv_dz;
         stencil_coefs_z[1] = 1._rt*inv_dz;
-
     }
 
     /**
@@ -120,20 +119,11 @@ struct CartesianCustomCoefAlgorithm {
 
         using namespace amrex;
 #if defined WARPX_DIM_3D
-        Real const alphay = coefs_y[1];
-        Real const betayz = coefs_y[2];
-        Real const betayx = coefs_y[3];
-        Real const gammay = coefs_y[4];
-        amrex::ignore_unused(n_coefs_y);
-        return alphay * (F(i  ,j+1,k  ,ncomp) - F(i  ,j  ,k  ,ncomp))
-             + betayx * (F(i+1,j+1,k  ,ncomp) - F(i+1,j  ,k  ,ncomp)
-                      +  F(i-1,j+1,k  ,ncomp) - F(i-1,j  ,k  ,ncomp))
-             + betayz * (F(i  ,j+1,k+1,ncomp) - F(i  ,j  ,k+1,ncomp)
-                      +  F(i  ,j+1,k-1,ncomp) - F(i  ,j  ,k-1,ncomp))
-             + gammay * (F(i+1,j+1,k+1,ncomp) - F(i+1,j  ,k+1,ncomp)
-                      +  F(i-1,j+1,k+1,ncomp) - F(i-1,j  ,k+1,ncomp)
-                      +  F(i+1,j+1,k-1,ncomp) - F(i+1,j  ,k-1,ncomp)
-                       +  F(i-1,j+1,k-1,ncomp) - F(i-1,j  ,k-1,ncomp));
+        amrex::Real derivative = 0;
+        for (int l=0; l<n_coefs_y/2; l++) {
+            derivative += coefs_y[l] * (F(i,j+1+l,k,ncomp) - F(i,j-l,k,ncomp));
+        }
+        return derivative;
 #elif (defined WARPX_DIM_XZ || WARPX_DIM_1D_Z)
         amrex::ignore_unused(F, coefs_y, n_coefs_y,
             i, j, k, ncomp);
@@ -155,9 +145,11 @@ struct CartesianCustomCoefAlgorithm {
 
         using namespace amrex;
 #if defined WARPX_DIM_3D
-        amrex::Real const inv_dy = coefs_y[0];
-        amrex::ignore_unused(n_coefs_y);
-        return inv_dy*( F(i,j,k,ncomp) - F(i,j-1,k,ncomp) );
+        amrex::Real derivative = 0;
+        for (int l=n_coefs_y/2; l<n_coefs_y; l++) {
+            derivative += coefs_y[l] * (F(i,j+l,k,ncomp) - F(i,j-l-1,k,ncomp));
+        }
+        return derivative;
 #elif (defined WARPX_DIM_XZ || WARPX_DIM_1D_Z)
         amrex::ignore_unused(F, coefs_y, n_coefs_y,
             i, j, k, ncomp);
@@ -177,33 +169,24 @@ struct CartesianCustomCoefAlgorithm {
         int const i, int const j, int const k, int const ncomp=0 ) {
 
         using namespace amrex;
-
-        amrex::ignore_unused(n_coefs_z);
-
-        Real const alphaz = coefs_z[1];
-#if (defined WARPX_DIM_3D || WARPX_DIM_XZ)
-        Real const betazx = coefs_z[2];
-#endif
 #if defined WARPX_DIM_3D
-        Real const betazy = coefs_z[3];
-        Real const gammaz = coefs_z[4];
-#endif
-#if defined WARPX_DIM_3D
-        return alphaz * (F(i  ,j  ,k+1,ncomp) - F(i  ,j  ,k  ,ncomp))
-             + betazx * (F(i+1,j  ,k+1,ncomp) - F(i+1,j  ,k  ,ncomp)
-                      +  F(i-1,j  ,k+1,ncomp) - F(i-1,j  ,k  ,ncomp))
-             + betazy * (F(i  ,j+1,k+1,ncomp) - F(i  ,j+1,k  ,ncomp)
-                      +  F(i  ,j-1,k+1,ncomp) - F(i  ,j-1,k  ,ncomp))
-             + gammaz * (F(i+1,j+1,k+1,ncomp) - F(i+1,j+1,k  ,ncomp)
-                      +  F(i-1,j+1,k+1,ncomp) - F(i-1,j+1,k  ,ncomp)
-                      +  F(i+1,j-1,k+1,ncomp) - F(i+1,j-1,k  ,ncomp)
-                      +  F(i-1,j-1,k+1,ncomp) - F(i-1,j-1,k  ,ncomp));
+        amrex::Real derivative = 0;
+        for (int l=0; l<n_coefs_z/2; l++) {
+            derivative += coefs_z[l] * (F(i,j,k+1+l,ncomp) - F(i,j,k-l,ncomp));
+        }
+        return derivative;
 #elif (defined WARPX_DIM_XZ)
-        return alphaz * (F(i  ,j+1,k  ,ncomp) - F(i  ,j  ,k  ,ncomp))
-             + betazx * (F(i+1,j+1,k  ,ncomp) - F(i+1,j  ,k  ,ncomp)
-                      +  F(i-1,j+1,k  ,ncomp) - F(i-1,j  ,k  ,ncomp));
+        amrex::Real derivative = 0;
+        for (int l=0; l<n_coefs_z/2; l++) {
+            derivative += coefs_z[l] * (F(i,j+1+l,k,ncomp) - F(i,j-l,k,ncomp));
+        }
+        return derivative;
 #elif (defined WARPX_DIM_1D_Z)
-        return alphaz * (F(i+1  ,j,k  ,ncomp) - F(i  ,j  ,k  ,ncomp));
+        amrex::Real derivative = 0;
+        for (int l=0; l<n_coefs_z/2; l++) {
+            derivative += coefs_z[l] * (F(i+1+l,j,k,ncomp) - F(i-l,j,k,ncomp));
+        }
+        return derivative;
 #endif
     }
 
@@ -213,19 +196,29 @@ struct CartesianCustomCoefAlgorithm {
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
     static amrex::Real DownwardDz (
         T_Field const& F,
-        amrex::Real const * const coefs_z, int const /*n_coefs_z*/,
+        amrex::Real const * const coefs_z, int const n_coefs_z,
         int const i, int const j, int const k, int const ncomp=0) {
 
-        amrex::Real const inv_dz = coefs_z[0];
 #if defined WARPX_DIM_3D
-        return inv_dz*( F(i,j,k,ncomp) - F(i,j,k-1,ncomp) );
+        amrex::Real derivative = 0;
+        for (int l=n_coefs_z/2; l<n_coefs_z; l++) {
+            derivative += coefs_z[l] * (F(i,j,k+l,ncomp) - F(i,j,k-l-1,ncomp));
+        }
+        return derivative;
 #elif (defined WARPX_DIM_XZ)
-        return inv_dz*( F(i,j,k,ncomp) - F(i,j-1,k,ncomp) );
+        amrex::Real derivative = 0;
+        for (int l=n_coefs_z/2; l<n_coefs_z; l++) {
+            derivative += coefs_z[l] * (F(i,j+l,k,ncomp) - F(i,j-l-1,k,ncomp));
+        }
+        return derivative;
 #elif (defined WARPX_DIM_1D_Z)
-        return inv_dz*( F(i,j,k,ncomp) - F(i-1,j,k,ncomp) );
+        amrex::Real derivative = 0;
+        for (int l=n_coefs_z/2; l<n_coefs_z; l++) {
+            derivative += coefs_z[l] * (F(i+l,j,k,ncomp) - F(i-l-1,j,k,ncomp));
+        }
+        return derivative;
 #endif
     }
-
 };
 
 #endif // WARPX_FINITE_DIFFERENCE_ALGORITHM_CARTESIAN_CUSTOM_COEF_H_
