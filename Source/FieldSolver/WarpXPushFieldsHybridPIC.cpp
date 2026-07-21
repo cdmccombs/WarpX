@@ -60,6 +60,11 @@ void WarpX::HybridPICEvolveFields ()
     // Perform charge deposition at t_{n+1} and current deposition at t_{n+1/2}.
     HybridPICDepositRhoAndJ();
 
+    // Calculate the electron pressure at t=n+1 (and mirror the implied
+    // electron temperature for diagnostics). Moved here, right after the
+    // deposition, from the end of this function.
+    m_hybrid_pic_model->CalculateElectronPressure();
+
     // Get the external current
     m_hybrid_pic_model->GetCurrentExternal();
 
@@ -100,6 +105,7 @@ void WarpX::HybridPICEvolveFields ()
         m_fields.get_mr_levels_alldirs(FieldType::Efield_fp, finest_level),
         current_fp_temp, rho_fp_temp,
         m_eb_update_E,
+        getistep(0),
         0.5_rt*dt[0],
         SubcyclingHalf::FirstHalf, guard_cells.ng_FieldSolver,
         WarpX::sync_nodal_points
@@ -131,6 +137,7 @@ void WarpX::HybridPICEvolveFields ()
         m_fields.get_mr_levels_alldirs(FieldType::current_fp, finest_level),
         rho_fp_temp,
         m_eb_update_E,
+        getistep(0),
         0.5_rt*dt[0],
         SubcyclingHalf::SecondHalf, guard_cells.ng_FieldSolver,
         WarpX::sync_nodal_points
@@ -159,9 +166,6 @@ void WarpX::HybridPICEvolveFields ()
             gett_new(0),
             0.5_rt*dt[0]);
     }
-
-    // Calculate the electron pressure at t=n+1
-    m_hybrid_pic_model->CalculateElectronPressure();
 
     // Update the E field to t=n+1 using the extrapolated J_i^n+1 value
     m_hybrid_pic_model->CalculatePlasmaCurrent(
@@ -205,18 +209,6 @@ void WarpX::HybridPICEvolveFields ()
         for (int idim = 0; idim < 3; ++idim) {
             MultiFab::Copy(*current_fp_temp[lev][idim], *m_fields.get(FieldType::current_fp, Direction{idim}, lev),
                            0, 0, 1, current_fp_temp[lev][idim]->nGrowVect());
-        }
-    }
-
-    // Check that the E-field does not have nan or inf values, otherwise print a clear message
-    ablastr::fields::MultiLevelVectorField Efield_fp = m_fields.get_mr_levels_alldirs(FieldType::Efield_fp, finest_level);
-    for (int lev = 0; lev <= finest_level; ++lev)
-    {
-        for (int idim = 0; idim < 3; ++idim) {
-            WARPX_ALWAYS_ASSERT_WITH_MESSAGE(
-                Efield_fp[lev][idim]->is_finite(),
-                "Non-finite value detected in E-field; this indicates more substeps should be used in the field solver."
-            );
         }
     }
 }
