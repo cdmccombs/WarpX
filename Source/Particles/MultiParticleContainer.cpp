@@ -176,6 +176,12 @@ MultiParticleContainer::ReadParameters ()
            m_Bz_particle_parser = std::make_unique<amrex::Parser>(
                utils::parser::makeParser(str_Bz_ext_particle_function,{"x","y","z","t"}));
 
+           // Warm-compile serially: Parser::compile caches its executor on
+           // first call, and GetExternalEBField compiles these parsers inside
+           // OMP-parallel tile loops — concurrent first-compiles race.
+           std::ignore = m_Bx_particle_parser->compile<4>();
+           std::ignore = m_By_particle_parser->compile<4>();
+           std::ignore = m_Bz_particle_parser->compile<4>();
         }
 
         // if the input string for E_ext_particle_s is
@@ -204,6 +210,10 @@ MultiParticleContainer::ReadParameters ()
            m_Ez_particle_parser = std::make_unique<amrex::Parser>(
                utils::parser::makeParser(str_Ez_ext_particle_function,{"x","y","z","t"}));
 
+           // Warm-compile serially (see B-field note above).
+           std::ignore = m_Ex_particle_parser->compile<4>();
+           std::ignore = m_Ey_particle_parser->compile<4>();
+           std::ignore = m_Ez_particle_parser->compile<4>();
         }
 
         // Read parameters and setup meta data for external particle fields
