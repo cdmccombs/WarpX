@@ -695,6 +695,24 @@ protected:
     amrex::Gpu::DeviceVector<amrex::Real> adk_correction_factors;
     std::string physical_element;
 
+    /** Custom field-ionization rate coefficients (SI units) replacing the
+     * element-table ADK coefficients: W(E) = A * E^p * exp(-B/E) per level,
+     * input as <species>.custom_adk_params = A0 p0 B0 [A1 p1 B1 ...].
+     * Used for molecular species (e.g. H2) with CTMC-calibrated rates. */
+    int do_custom_adk_params = 0;
+
+    /** H2 double-ionization split: H2+ -> H+ + H+ + e- triggered by the
+     * level-1 entry of the (custom) ADK coefficient arrays. The molecule is
+     * removed; protons receive back-to-back momenta with KER sampled from an
+     * inverse-CDF table. */
+    int do_h2_double_ionization = 0;
+    int h2_di_product_ion = -1;
+    int h2_di_product_electron = -1;
+    std::string h2_di_product_ion_name;
+    std::string h2_di_product_electron_name;
+    /** KER [J] at uniform quantiles (inverse CDF) for DI proton emission */
+    amrex::Gpu::DeviceVector<amrex::Real> h2_di_ker_cdf;
+
     int do_resampling = 0;
 
     /** Whether back-transformed diagnostics is turned on for the corresponding species.*/

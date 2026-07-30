@@ -223,6 +223,18 @@ public:
                                             const amrex::FArrayBox& By,
                                             const amrex::FArrayBox& Bz);
 
+    /** Filter selecting H2+ (ionization level 1) particles for the
+     * double-ionization split, using the level-1 custom rate coefficients. */
+    IonizationFilterFunc getH2DIFilterFunc (const WarpXParIter& pti,
+                                            int lev,
+                                            amrex::IntVect ngEB,
+                                            const amrex::FArrayBox& Ex,
+                                            const amrex::FArrayBox& Ey,
+                                            const amrex::FArrayBox& Ez,
+                                            const amrex::FArrayBox& Bx,
+                                            const amrex::FArrayBox& By,
+                                            const amrex::FArrayBox& Bz);
+
     // Inject particles in Box 'part_box'
     virtual void AddParticles (int lev);
 

@@ -211,6 +211,13 @@ public:
                             const amrex::MultiFab& Ex, const amrex::MultiFab& Ey, const amrex::MultiFab& Ez,
                             const amrex::MultiFab& Bx, const amrex::MultiFab& By, const amrex::MultiFab& Bz);
 
+    /** H2 double-ionization split: for species with do_h2_double_ionization,
+     * convert field-selected H2+ (level 1) into two product ions (back-to-back
+     * KER kick) plus one electron, removing the molecule. */
+    void doH2DoubleIonization (int lev,
+                            const amrex::MultiFab& Ex, const amrex::MultiFab& Ey, const amrex::MultiFab& Ez,
+                            const amrex::MultiFab& Bx, const amrex::MultiFab& By, const amrex::MultiFab& Bz);
+
     void doCollisions (int step, amrex::Real cur_time, amrex::Real dt);
 
     /**

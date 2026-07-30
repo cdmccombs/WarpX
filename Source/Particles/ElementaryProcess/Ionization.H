@@ -38,6 +38,7 @@ struct IonizationFilterFunc
     int comp;
     int m_atomic_number;
     int m_do_adk_correction = 0;
+    int m_min_level = 0;
 
     GetParticlePosition<PIdx> m_get_position;
     GetExternalEBField m_get_externalEB;
@@ -88,7 +89,8 @@ struct IonizationFilterFunc
                           int a_comp,
                           int a_atomic_number,
                           int a_do_adk_correction,
-                          int a_offset = 0) noexcept;
+                          int a_offset = 0,
+                          int a_min_level = 0) noexcept;
 
     template <typename PData>
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
@@ -97,7 +99,7 @@ struct IonizationFilterFunc
         using namespace amrex::literals;
 
         const int ion_lev = ptd.m_runtime_idata[comp][i];
-        if (ion_lev < m_atomic_number)
+        if (ion_lev >= m_min_level && ion_lev < m_atomic_number)
         {
             constexpr amrex::Real c = PhysConst::c;
             constexpr amrex::Real c2_inv = amrex::Real(1.)/c/c;

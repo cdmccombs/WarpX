@@ -109,6 +109,7 @@
 #include <limits>
 #include <map>
 #include <random>
+#include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -1602,22 +1603,78 @@ PhysicalParticleContainer::InitIonizationModule ()
     utils::parser::queryWithParser(
         pp_species_name, "ionization_initial_level", ionization_initial_level);
     pp_species_name.get("ionization_product_species", ionization_product_name);
-    pp_species_name.get("physical_element", physical_element);
+
+    utils::parser::queryWithParser(
+        pp_species_name, "do_custom_adk_params", do_custom_adk_params);
     WARPX_ALWAYS_ASSERT_WITH_MESSAGE(
-        physical_element == "H" || !do_adk_correction,
-        "Correction to ADK by Zhang et al., PRA 90, 043410 (2014) only works with Hydrogen");
+        !(do_custom_adk_params && do_adk_correction),
+        "do_custom_adk_params is incompatible with do_adk_correction");
+
     // Add runtime integer component for ionization level
     if (!HasiAttrib("ionizationLevel")) {
         AddIntComp("ionizationLevel");
     }
-    // Get atomic number and ionization energies from file
-    const int ion_element_id = utils::physics::ion_map_ids.at(physical_element);
-    ion_atomic_number = utils::physics::ion_atomic_numbers[ion_element_id];
-    Vector<Real> h_ionization_energies(ion_atomic_number);
-    const int offset = utils::physics::ion_energy_offsets[ion_element_id];
-    for(int i=0; i<ion_atomic_number; i++){
-        h_ionization_energies[i] =
-            utils::physics::table_ionization_energies[i+offset];
+
+    Vector<Real> h_ionization_energies;
+    Vector<Real> h_custom_adk_params;
+    if (do_custom_adk_params) {
+        // Custom rate coefficients W(E) = A * E^p * exp(-B/E) (SI units:
+        // E in V/m, W in 1/s), given as A0 p0 B0 [A1 p1 B1 ...] per
+        // ionization level. Used for molecular species (e.g. H2) with
+        // CTMC-calibrated rates; bypasses the element table entirely.
+        utils::parser::getArrWithParser(
+            pp_species_name, "custom_adk_params", h_custom_adk_params);
+        WARPX_ALWAYS_ASSERT_WITH_MESSAGE(
+            !h_custom_adk_params.empty() && h_custom_adk_params.size() % 3 == 0,
+            "custom_adk_params must contain 3 values (A, p, B) per ionization level");
+        ion_atomic_number = static_cast<int>(h_custom_adk_params.size()) / 3;
+        // ionization energies are not used by the custom-rate path
+        h_ionization_energies.resize(ion_atomic_number, 0._rt);
+    } else {
+        pp_species_name.get("physical_element", physical_element);
+        WARPX_ALWAYS_ASSERT_WITH_MESSAGE(
+            physical_element == "H" || !do_adk_correction,
+            "Correction to ADK by Zhang et al., PRA 90, 043410 (2014) only works with Hydrogen");
+        // Get atomic number and ionization energies from file
+        const int ion_element_id = utils::physics::ion_map_ids.at(physical_element);
+        ion_atomic_number = utils::physics::ion_atomic_numbers[ion_element_id];
+        h_ionization_energies.resize(ion_atomic_number);
+        const int offset = utils::physics::ion_energy_offsets[ion_element_id];
+        for(int i=0; i<ion_atomic_number; i++){
+            h_ionization_energies[i] =
+                utils::physics::table_ionization_energies[i+offset];
+        }
+    }
+
+    // H2 double-ionization split process: H2+ -> H+ + H+ + e-, driven by the
+    // level-1 entry of the (custom) rate coefficients. See doH2DoubleIonization.
+    utils::parser::queryWithParser(
+        pp_species_name, "do_h2_double_ionization", do_h2_double_ionization);
+    if (do_h2_double_ionization) {
+        WARPX_ALWAYS_ASSERT_WITH_MESSAGE(
+            do_custom_adk_params && ion_atomic_number == 2,
+            "do_h2_double_ionization requires do_custom_adk_params with exactly "
+            "2 levels (W1 = SI, W2 = DI)");
+        pp_species_name.get("h2_di_product_ion_species", h2_di_product_ion_name);
+        pp_species_name.get("h2_di_product_electron_species", h2_di_product_electron_name);
+        std::string ker_cdf_file;
+        pp_species_name.get("h2_di_ker_cdf_file", ker_cdf_file);
+        // Plain-text file: one KER value in eV per line, at uniform quantiles
+        // of the KER distribution (inverse CDF).
+        std::ifstream ifs(ker_cdf_file);
+        WARPX_ALWAYS_ASSERT_WITH_MESSAGE(ifs.good(),
+            "Could not open h2_di_ker_cdf_file: " + ker_cdf_file);
+        Vector<Real> h_ker_cdf;
+        std::string line;
+        while (std::getline(ifs, line)) {
+            if (line.empty() || line[0] == '#') { continue; }
+            h_ker_cdf.push_back(static_cast<Real>(std::stod(line) * PhysConst::q_e));
+        }
+        WARPX_ALWAYS_ASSERT_WITH_MESSAGE(h_ker_cdf.size() >= 2,
+            "h2_di_ker_cdf_file must contain at least 2 KER values");
+        h2_di_ker_cdf.resize(h_ker_cdf.size());
+        Gpu::copyAsync(Gpu::hostToDevice, h_ker_cdf.begin(), h_ker_cdf.end(),
+                       h2_di_ker_cdf.begin());
     }
     // Compute ADK prefactors (See Chen, JCP 236 (2013), equation (2))
     // For now, we assume l=0 and m=0.
@@ -1629,7 +1686,6 @@ PhysicalParticleContainer::InitIonizationModule ()
     constexpr Real Ea = PhysConst::m_e * PhysConst::c2 /PhysConst::q_e *
         a4/PhysConst::r_e;
     constexpr Real UH = utils::physics::table_ionization_energies[0];
-    const Real l_eff = std::sqrt(UH/h_ionization_energies[0]) - 1._rt;
 
     const Real dt = WarpX::GetInstance().getdt(0);
 
@@ -1641,6 +1697,26 @@ PhysicalParticleContainer::InitIonizationModule ()
     Gpu::copyAsync(Gpu::hostToDevice,
                    h_ionization_energies.begin(), h_ionization_energies.end(),
                    ionization_energies.begin());
+
+    if (do_custom_adk_params) {
+        // W(E) = A * E^p * exp(-B/E): prefactor = dt*A (probability per step),
+        // power = p, exp_prefactor = -B. No element-table quantities involved.
+        Vector<Real> h_pref(ion_atomic_number), h_pow(ion_atomic_number),
+                     h_expp(ion_atomic_number);
+        for (int i = 0; i < ion_atomic_number; ++i) {
+            h_pref[i] = dt * h_custom_adk_params[3*i];
+            h_pow[i]  = h_custom_adk_params[3*i + 1];
+            h_expp[i] = -h_custom_adk_params[3*i + 2];
+        }
+        Gpu::copyAsync(Gpu::hostToDevice, h_pref.begin(), h_pref.end(), adk_prefactor.begin());
+        Gpu::copyAsync(Gpu::hostToDevice, h_pow.begin(), h_pow.end(), adk_power.begin());
+        Gpu::copyAsync(Gpu::hostToDevice, h_expp.begin(), h_expp.end(), adk_exp_prefactor.begin());
+        adk_correction_factors.resize(4);
+        Gpu::synchronize();
+        return;
+    }
+
+    const Real l_eff = std::sqrt(UH/h_ionization_energies[0]) - 1._rt;
 
     adk_correction_factors.resize(4);
     if (do_adk_correction) {
@@ -1685,6 +1761,11 @@ PhysicalParticleContainer::getIonizationFunc (const WarpXParIter& pti,
 {
     ABLASTR_PROFILE("PhysicalParticleContainer::getIonizationFunc()");
 
+    // When the H2 double-ionization split process is active, the standard
+    // ionization pipeline only handles level 0 (SI); level 1 is consumed by
+    // doH2DoubleIonization instead of being incremented in place.
+    const int max_std_level = do_h2_double_ionization ? 1 : ion_atomic_number;
+
     return {pti, lev, ngEB, Ex, Ey, Ez, Bx, By, Bz,
                                 m_E_external_particle, m_B_external_particle,
                                 ionization_energies.dataPtr(),
@@ -1693,8 +1774,38 @@ PhysicalParticleContainer::getIonizationFunc (const WarpXParIter& pti,
                                 adk_power.dataPtr(),
                                 adk_correction_factors.dataPtr(),
                                 GetIntCompIndex("ionizationLevel"),
-                                ion_atomic_number,
+                                max_std_level,
                                 do_adk_correction};
+}
+
+IonizationFilterFunc
+PhysicalParticleContainer::getH2DIFilterFunc (const WarpXParIter& pti,
+                                              int lev,
+                                              amrex::IntVect ngEB,
+                                              const amrex::FArrayBox& Ex,
+                                              const amrex::FArrayBox& Ey,
+                                              const amrex::FArrayBox& Ez,
+                                              const amrex::FArrayBox& Bx,
+                                              const amrex::FArrayBox& By,
+                                              const amrex::FArrayBox& Bz)
+{
+    ABLASTR_PROFILE("PhysicalParticleContainer::getH2DIFilterFunc()");
+
+    // Select H2+ (level 1) particles with the W2 rate (level-1 coefficients):
+    // min_level = 1, max level = 2.
+    return {pti, lev, ngEB, Ex, Ey, Ez, Bx, By, Bz,
+                                m_E_external_particle, m_B_external_particle,
+                                ionization_energies.dataPtr(),
+                                adk_prefactor.dataPtr(),
+                                adk_exp_prefactor.dataPtr(),
+                                adk_power.dataPtr(),
+                                adk_correction_factors.dataPtr(),
+                                GetIntCompIndex("ionizationLevel"),
+                                2, // atomic_number (max level)
+                                0, // no adk correction
+                                0, // offset
+                                1  // min_level
+                                };
 }
 
 PlasmaInjector* PhysicalParticleContainer::GetPlasmaInjector (int i)

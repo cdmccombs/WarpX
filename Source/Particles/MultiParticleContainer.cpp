@@ -13,6 +13,7 @@
 
 #include "Fields.H"
 #include "Particles/ElementaryProcess/Ionization.H"
+#include "Particles/ElementaryProcess/H2DoubleIonization.H"
 #ifdef WARPX_QED
 #   include "Particles/ElementaryProcess/QEDInternals/BreitWheelerEngineWrapper.H"
 #   include "Particles/ElementaryProcess/QEDInternals/QuantumSyncEngineWrapper.H"
@@ -1044,6 +1045,13 @@ MultiParticleContainer::mapSpeciesProduct ()
             pc->ionization_product = i_product;
         }
 
+        if (pc->do_h2_double_ionization){
+            pc->h2_di_product_ion =
+                getSpeciesID(pc->h2_di_product_ion_name);
+            pc->h2_di_product_electron =
+                getSpeciesID(pc->h2_di_product_electron_name);
+        }
+
 #ifdef WARPX_QED
         if (pc->has_breit_wheeler()){
             const int i_product_ele = getSpeciesID(
@@ -1209,6 +1217,67 @@ MultiParticleContainer::doFieldIonization (int lev,
                 wt = static_cast<amrex::Real>(amrex::second()) - wt;
                 amrex::HostDevice::Atomic::Add( &(*cost)[pti.index()], wt);
             }
+        }
+    }
+}
+
+void
+MultiParticleContainer::doH2DoubleIonization (int lev,
+                                              const MultiFab& Ex,
+                                              const MultiFab& Ey,
+                                              const MultiFab& Ez,
+                                              const MultiFab& Bx,
+                                              const MultiFab& By,
+                                              const MultiFab& Bz)
+{
+    ABLASTR_PROFILE("MultiParticleContainer::doH2DoubleIonization()");
+
+    for (auto& pc_source : allcontainers)
+    {
+        if (!pc_source->do_h2_double_ionization){ continue; }
+
+        auto& pc_ion = allcontainers[pc_source->h2_di_product_ion];
+        auto& pc_ele = allcontainers[pc_source->h2_di_product_electron];
+
+        const SmartCopyFactory copy_factory_ion(*pc_source, *pc_ion);
+        const SmartCopyFactory copy_factory_ele(*pc_source, *pc_ele);
+        auto *phys_pc_ptr = static_cast<PhysicalParticleContainer*>(pc_source.get());
+
+        auto CopyIon = copy_factory_ion.getSmartCopy();
+        auto CopyEle = copy_factory_ele.getSmartCopy();
+        const auto Transform = H2DISplitTransformFunc(
+            pc_source->h2_di_ker_cdf.dataPtr(),
+            static_cast<int>(pc_source->h2_di_ker_cdf.size()),
+            pc_ion->getMass());
+
+        pc_source->defineAllParticleTiles();
+        pc_ion->defineAllParticleTiles();
+        pc_ele->defineAllParticleTiles();
+
+        auto info = getMFItInfo(*pc_source, *pc_ion, *pc_ele);
+
+#ifdef AMREX_USE_OMP
+#pragma omp parallel if (Gpu::notInLaunchRegion())
+#endif
+        for (WarpXParIter pti(*pc_source, lev, info); pti.isValid(); ++pti)
+        {
+            auto& src_tile = pc_source->ParticlesAt(lev, pti);
+            auto& dst_ion_tile = pc_ion->ParticlesAt(lev, pti);
+            auto& dst_ele_tile = pc_ele->ParticlesAt(lev, pti);
+
+            auto Filter = phys_pc_ptr->getH2DIFilterFunc(pti, lev, Ex.nGrowVect(),
+                                                         Ex[pti], Ey[pti], Ez[pti],
+                                                         Bx[pti], By[pti], Bz[pti]);
+
+            const auto np_dst_ion = dst_ion_tile.numParticles();
+            const auto np_dst_ele = dst_ele_tile.numParticles();
+            const auto num_added = filterCopyTransformParticles<2>(
+                *pc_ion, *pc_ele, dst_ion_tile, dst_ele_tile, src_tile,
+                np_dst_ion, np_dst_ele,
+                Filter, CopyIon, CopyEle, Transform);
+
+            setNewParticleIDs(dst_ion_tile, np_dst_ion, num_added);
+            setNewParticleIDs(dst_ele_tile, np_dst_ele, num_added);
         }
     }
 }
