@@ -9,6 +9,7 @@
 #include "WarpX.H"
 
 #include "BoundaryConditions/PML.H"
+#include "BoundaryConditions/TFSFSource.H"
 #include "Fields.H"
 #include "FieldSolver/FiniteDifferenceSolver/FiniteDifferenceSolver.H"
 #if defined(WARPX_USE_FFT)
@@ -991,6 +992,15 @@ WarpX::EvolveB (int lev, PatchType patch_type, amrex::Real a_dt, SubcyclingHalf 
         }
     }
 
+    // TFSF stencil corrections: the B push reads the E field at start_time
+    // for the first half push and at start_time + a_dt for the second
+    if (m_tfsf_source->isEnabled() && patch_type == PatchType::fine) {
+        amrex::Real const t_Einc = (subcycling_half == SubcyclingHalf::SecondHalf) ?
+            start_time + a_dt : start_time;
+        m_tfsf_source->ApplyToB(m_fields.get_alldirs(FieldType::Bfield_fp, lev),
+                                Geom(lev), a_dt, t_Einc);
+    }
+
     amrex::Real const new_time = start_time + a_dt;
     ApplyBfieldBoundary(lev, patch_type, subcycling_half, new_time);
 }
@@ -1056,6 +1066,13 @@ WarpX::EvolveE (int lev, PatchType patch_type, amrex::Real a_dt, amrex::Real sta
                 pml[lev]->GetMultiSigmaBox_cp(),
                 a_dt, pml_has_particles );
         }
+    }
+
+    // TFSF stencil corrections: the E push reads the B field at its
+    // leapfrog half-step centering, start_time + a_dt/2
+    if (m_tfsf_source->isEnabled() && patch_type == PatchType::fine) {
+        m_tfsf_source->ApplyToE(m_fields.get_alldirs(FieldType::Efield_fp, lev),
+                                Geom(lev), a_dt, start_time + 0.5_rt*a_dt);
     }
 
     amrex::Real const new_time = start_time + a_dt;
@@ -1242,6 +1259,13 @@ WarpX::MacroscopicEvolveE (int lev, PatchType patch_type, amrex::Real a_dt, amre
                 pml[lev]->GetMultiSigmaBox_cp(),
                 a_dt, pml_has_particles );
         }
+    }
+
+    // TFSF stencil corrections; valid provided the TFSF surface sits in
+    // vacuum, where the macroscopic update coefficients reduce to c^2*dt
+    if (m_tfsf_source->isEnabled() && patch_type == PatchType::fine) {
+        m_tfsf_source->ApplyToE(m_fields.get_alldirs(FieldType::Efield_fp, lev),
+                                Geom(lev), a_dt, start_time + 0.5_rt*a_dt);
     }
 
     amrex::Real const new_time = start_time + a_dt;

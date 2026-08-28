@@ -1,0 +1,48 @@
+# TFSF validation stage 1c: 3D pulsed plane wave propagating in the y-z plane
+# at 30 deg from z, polarized along x.  Exercises the y-face (Ex/Bz, Ez/Bx)
+# and z-face (Ex/By) correction pairs and the 3D edge/corner logic.
+# Grid-matched carrier k and discrete-eigenmode B ratios for this grid
+# (dx=dy=dz=83.3nm, cfl=0.9999).  Wave: E = x_hat, k_hat = (0, sth, cth),
+# B = k_hat x E / c = (0, cth, -sth)*E/c.
+
+max_step = 800
+amr.n_cell = 144 144 192
+amr.max_level = 0
+amr.blocking_factor = 8
+amr.max_grid_size = 96
+
+geometry.dims = 3
+geometry.prob_lo = -6.e-6 -6.e-6 0.0
+geometry.prob_hi = 6.e-6 6.e-6 16.e-6
+
+boundary.field_lo = pml pml pml
+boundary.field_hi = pml pml pml
+
+algo.maxwell_solver = yee
+warpx.cfl = 0.9999
+warpx.verbose = 0
+
+my_constants.E0 = 1.e9
+my_constants.lam = 800.e-9
+my_constants.tau = 8.e-15
+my_constants.tpk = 30.e-15
+my_constants.sth = sin(30*pi/180)
+my_constants.cth = cos(30*pi/180)
+my_constants.om = 2*pi*clight/lam
+my_constants.kyn = 3.9479885534e6
+my_constants.kzn = 6.8381167621e6
+my_constants.rby = 2.8821749849e-9
+my_constants.rbz = 1.6791569066e-9
+my_constants.vg = 2.9497547457e8
+
+tfsf.faces = x_lo x_hi y_lo y_hi z_lo z_hi
+tfsf.offset_cells = 8
+tfsf.Ex_inc_function(x,y,z,t) = "E0*exp(-((t - (y*sth + z*cth)/vg - tpk)/tau)^2)*cos(kyn*y + kzn*z - om*t + om*tpk)"
+tfsf.By_inc_function(x,y,z,t) = "rby*E0*exp(-((t - (y*sth + z*cth)/vg - tpk)/tau)^2)*cos(kyn*y + kzn*z - om*t + om*tpk)"
+tfsf.Bz_inc_function(x,y,z,t) = "-rbz*E0*exp(-((t - (y*sth + z*cth)/vg - tpk)/tau)^2)*cos(kyn*y + kzn*z - om*t + om*tpk)"
+
+diagnostics.diags_names = diag1
+diag1.intervals = 200
+diag1.diag_type = Full
+diag1.format = plotfile
+diag1.fields_to_plot = Ex

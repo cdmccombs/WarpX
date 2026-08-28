@@ -1,0 +1,38 @@
+# TFSF (total-field/scattered-field) source test, 1D: a normally incident
+# pulsed plane wave is injected through the z_lo TFSF face and analytically
+# cancelled at the z_hi face.  The scattered-field regions (between the TFSF
+# surface and the domain boundary) must stay empty to the incident-dispersion
+# floor.  At cfl close to 1 the 1D Yee scheme is nearly dispersionless.
+
+max_step = 2400
+amr.n_cell = 1200
+amr.max_level = 0
+amr.blocking_factor = 8
+amr.max_grid_size = 512
+
+geometry.dims = 1
+geometry.prob_lo = 0.0
+geometry.prob_hi = 40.e-6
+
+boundary.field_lo = absorbing_silver_mueller
+boundary.field_hi = absorbing_silver_mueller
+
+algo.maxwell_solver = yee
+warpx.cfl = 0.9999
+warpx.verbose = 0
+
+my_constants.E0 = 1.e9
+my_constants.lam = 800.e-9
+my_constants.tau = 10.e-15
+my_constants.tpk = 40.e-15
+
+tfsf.faces = z_lo z_hi
+tfsf.offset_cells = 8
+tfsf.Ey_inc_function(x,y,z,t) = "E0*exp(-((t - z/clight - tpk)/tau)^2)*cos(2*pi*clight/lam*(t - z/clight - tpk))"
+tfsf.Bx_inc_function(x,y,z,t) = "-E0/clight*exp(-((t - z/clight - tpk)/tau)^2)*cos(2*pi*clight/lam*(t - z/clight - tpk))"
+
+diagnostics.diags_names = diag1
+diag1.intervals = 400
+diag1.diag_type = Full
+diag1.format = plotfile
+diag1.fields_to_plot = Ey Bx

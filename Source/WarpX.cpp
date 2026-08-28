@@ -14,6 +14,7 @@
 #include "BoundaryConditions/FieldBoundaries.H"
 #include "BoundaryConditions/PEC_Insulator.H"
 #include "BoundaryConditions/PML.H"
+#include "BoundaryConditions/TFSFSource.H"
 #include "Diagnostics/MultiDiagnostics.H"
 #include "Diagnostics/ReducedDiags/MultiReducedDiags.H"
 #include "EmbeddedBoundary/Enabled.H"
@@ -1897,6 +1898,23 @@ WarpX::ReadParameters ()
 
     // Setup pec_insulator boundary conditions
     pec_insulator_boundary = std::make_unique<PEC_Insulator>();
+
+    // Setup the TFSF (Huygens surface) incident-wave source
+    m_tfsf_source = std::make_unique<TFSFSource>();
+    if (m_tfsf_source->isEnabled()) {
+        WARPX_ALWAYS_ASSERT_WITH_MESSAGE(
+            electromagnetic_solver_id == ElectromagneticSolverAlgo::Yee,
+            "tfsf.faces: the TFSF source requires the Yee solver (algo.maxwell_solver = yee)");
+        WARPX_ALWAYS_ASSERT_WITH_MESSAGE(
+            grid_type == ablastr::utils::enums::GridType::Staggered,
+            "tfsf.faces: the TFSF source requires a staggered grid");
+        WARPX_ALWAYS_ASSERT_WITH_MESSAGE(
+            evolve_scheme == EvolveScheme::Explicit,
+            "tfsf.faces: the TFSF source requires the explicit evolve scheme");
+        WARPX_ALWAYS_ASSERT_WITH_MESSAGE(
+            maxLevel() == 0,
+            "tfsf.faces: the TFSF source does not support mesh refinement");
+    }
 
     // for slice generation //
     {

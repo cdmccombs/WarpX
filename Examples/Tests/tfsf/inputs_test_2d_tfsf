@@ -1,0 +1,50 @@
+# TFSF (total-field/scattered-field) source test, 2D: a pulsed plane wave at
+# 30 degrees from z crosses a closed TFSF box (all four faces + corners).
+# The incident carrier uses the numeric wavevector solving the 2D Yee
+# dispersion relation for this grid, the incident B uses the
+# discrete-eigenmode E/B ratios, and the envelope moves at the numeric group
+# velocity; the remaining scattered-field leakage is the finite-bandwidth
+# dispersion floor.  Values below computed for n_cell 480^2 over 20x20 um,
+# cfl 0.9999 (kn/k0 - 1 = 5.6e-4).
+
+max_step = 1400
+amr.n_cell = 480 480
+amr.max_level = 0
+amr.blocking_factor = 8
+amr.max_grid_size = 256
+
+geometry.dims = 2
+geometry.prob_lo = -10.e-6 0.0
+geometry.prob_hi = 10.e-6 20.e-6
+
+boundary.field_lo = pml pml
+boundary.field_hi = pml pml
+
+algo.maxwell_solver = yee
+warpx.cfl = 0.9999
+warpx.verbose = 0
+
+my_constants.E0 = 1.e9
+my_constants.lam = 800.e-9
+my_constants.tau = 8.e-15
+my_constants.tpk = 35.e-15
+my_constants.sth = sin(30*pi/180)
+my_constants.cth = cos(30*pi/180)
+my_constants.om = 2*pi*clight/lam
+my_constants.kxn = 3.9291951198e6
+my_constants.kzn = 6.8055655804e6
+my_constants.rbx = 2.8871330320e-9
+my_constants.rbz = 1.6706176750e-9
+my_constants.vg = 2.9928660007e8
+
+tfsf.faces = x_lo x_hi z_lo z_hi
+tfsf.offset_cells = 8
+tfsf.Ey_inc_function(x,y,z,t) = "E0*exp(-((t - (x*sth + z*cth)/vg - tpk)/tau)^2)*cos(kxn*x + kzn*z - om*t + om*tpk)"
+tfsf.Bx_inc_function(x,y,z,t) = "-rbx*E0*exp(-((t - (x*sth + z*cth)/vg - tpk)/tau)^2)*cos(kxn*x + kzn*z - om*t + om*tpk)"
+tfsf.Bz_inc_function(x,y,z,t) = "rbz*E0*exp(-((t - (x*sth + z*cth)/vg - tpk)/tau)^2)*cos(kxn*x + kzn*z - om*t + om*tpk)"
+
+diagnostics.diags_names = diag1
+diag1.intervals = 200
+diag1.diag_type = Full
+diag1.format = plotfile
+diag1.fields_to_plot = Ey

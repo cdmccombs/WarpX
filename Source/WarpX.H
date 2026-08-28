@@ -13,6 +13,7 @@
 #define WARPX_H_
 
 #include "BoundaryConditions/PEC_Insulator_fwd.H"
+#include "BoundaryConditions/TFSFSource_fwd.H"
 #include "BoundaryConditions/PML_fwd.H"
 #include "Diagnostics/MultiDiagnostics_fwd.H"
 #include "Diagnostics/ReducedDiags/MultiReducedDiags_fwd.H"
@@ -1276,6 +1277,9 @@ private:
 
     // Insulator boundary conditions
     std::unique_ptr<PEC_Insulator> pec_insulator_boundary;
+
+    // Total-field/scattered-field (Huygens surface) incident-wave source
+    std::unique_ptr<TFSFSource> m_tfsf_source;
 
     // External fields parameters
     std::unique_ptr<ExternalFieldParams> m_p_ext_field_params;

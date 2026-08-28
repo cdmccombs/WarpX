@@ -4,6 +4,7 @@ foreach(D IN LISTS WarpX_DIMS)
       PRIVATE
         FieldBoundaries.cpp
         PEC_Insulator.cpp
+        TFSFSource.cpp
         PML.cpp
         WarpXEvolvePML.cpp
         WarpXFieldBoundaries.cpp

@@ -833,6 +833,43 @@ Domain Boundary Conditions
 
     * ``open``: For the electrostatic Poisson solver based on a Integrated Green Function method.
 
+.. pp:param:: tfsf.faces
+
+    (list of strings) optional
+    Enables a total-field/scattered-field (TFSF, Huygens-surface) source: an analytically
+    prescribed incident wave is injected through a surface placed ``tfsf.offset_cells``
+    inside the listed domain faces (subset of ``x_lo x_hi y_lo y_hi z_lo z_hi``).
+    The cells interior to the surface hold the total field; the cells between the surface
+    and the domain boundary hold the scattered field only.  The split is enforced by
+    correcting the finite-difference stencils that straddle the surface with the incident
+    field, so nothing is overwritten: outgoing/scattered light crosses the surface
+    unimpeded and can be absorbed by a PML behind it.  This is the standard transparent
+    alternative to driving a boundary with ``pec_insulator`` (which, being a Dirichlet
+    condition, reflects any deviation from the prescribed field).
+
+    Only the explicit staggered Yee Cartesian solver is supported (1D, 2D, 3D, single
+    level).  The macroscopic solver is supported provided the surface itself lies in
+    vacuum.
+
+    * ``tfsf.offset_cells`` (integer, default 8): number of cells between the domain
+      boundary and the TFSF surface.
+
+    * ``tfsf.Ex_inc_function(x,y,z,t)``, ``tfsf.Ey_inc_function(x,y,z,t)``,
+      ``tfsf.Ez_inc_function(x,y,z,t)``, ``tfsf.Bx_inc_function(x,y,z,t)``,
+      ``tfsf.By_inc_function(x,y,z,t)``, ``tfsf.Bz_inc_function(x,y,z,t)``:
+      expressions for the incident-field components (unspecified components are zero).
+      Both the tangential E and the tangential B of the incident wave must be given for
+      the injection to be one-way.
+
+    The residual leakage into the scattered-field region is set by how well the
+    prescribed incident wave satisfies the *discrete* Maxwell equations: for best
+    results evaluate the carrier with the wavevector solving the grid dispersion
+    relation at the carrier frequency, use the discrete-eigenmode E/B amplitude
+    ratios, and advect the envelope at the numeric group velocity (see
+    ``Examples/Tests/tfsf`` for worked decks).  The mismatch from using the analytic
+    vacuum forms radiates into the scattered-field region and is absorbed by the PML
+    rather than reflected, so the scheme degrades gracefully.
+
 .. pp:param:: boundary.potential_lo/hi_x/y/z
     :link_aliases:
         boundary.potential_lo_x/y/z
